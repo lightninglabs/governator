@@ -22,9 +22,11 @@ import (
 	"github.com/lightninglabs/faraday/accounting"
 	"github.com/lightninglabs/faraday/fiat"
 	"github.com/lightninglabs/faraday/paginater"
+	"github.com/lightninglabs/faraday/ratelimit"
 	"github.com/lightninglabs/faraday/recommend"
 	"github.com/lightninglabs/faraday/revenue"
 	"github.com/lightningnetwork/lnd/lnrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"google.golang.org/grpc"
 )
 
@@ -88,12 +90,19 @@ type RPCServer struct {
 
 	restCancel func()
 	wg         sync.WaitGroup
+
+	ctx       context.Context
+	cancelCtx func()
 }
 
 // Config provides closures and settings required to run the rpc server.
 type Config struct {
 	// LightningClient is a client which can be used to query lnd.
 	LightningClient lnrpc.LightningClient
+
+	// RouterClient is a client which can be used to access routing
+	// functionality in lnd.
+	RouterClient routerrpc.RouterClient
 
 	// RPCListen is the address:port that the gRPC server should listen on.
 	RPCListen string
@@ -342,6 +351,16 @@ func (s *RPCServer) Start() error {
 		}
 	}()
 
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		err := ratelimit.Run(s.ctx, s.cfg.RouterClient)
+		if err != nil {
+			log.Errorf("Rate limiter failed: %v", err)
+		}
+	}()
+
 	return nil
 }
 
@@ -362,6 +381,10 @@ func (s *RPCServer) StartAsSubserver(lndClient lnrpc.LightningClient) error {
 func (s *RPCServer) Stop() error {
 	if atomic.AddInt32(&s.stopped, 1) != 1 {
 		return nil
+	}
+
+	if s.cancelCtx != nil {
+		s.cancelCtx()
 	}
 
 	if s.restServer != nil {
