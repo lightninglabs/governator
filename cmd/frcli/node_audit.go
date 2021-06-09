@@ -194,6 +194,13 @@ func queryOnChainReport(ctx *cli.Context) error {
 		}
 	}()
 
+	if len(report.Reports) > 0 {
+		CSVHeaders = strings.Replace(
+			CSVHeaders, "Fiat",
+			report.Reports[0].BtcPrice.Currency, 1,
+		)
+	}
+
 	csvStrs := []string{CSVHeaders}
 	for _, report := range report.Reports {
 		csvStrs = append(csvStrs, csv(report))
