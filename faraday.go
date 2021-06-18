@@ -85,6 +85,7 @@ func Main() error {
 		RestClientConfig: restClientCreds,
 		FaradayDir:       config.FaradayDir,
 		MacaroonPath:     config.MacaroonPath,
+		SocksProxy:       config.SocksProxy,
 	}
 
 	// If the client chose to connect to a bitcoin client, get one now.
